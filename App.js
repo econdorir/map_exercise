@@ -1,31 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Button } from 'react-native';
-import * as Location from 'expo-location'; // Importing the expo-location package
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, Button, TouchableOpacity, ScrollView } from "react-native";
+import * as Location from "expo-location"; // Importing the expo-location package
+import MapView, { Marker } from "react-native-maps"; // Importing MapView and Marker
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 
-export default function App() {
+// HomeScreen Component
+const HomeScreen = ({ navigation }) => {
   const [taxisData, setTaxisData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [nearestTaxis, setNearestTaxis] = useState([]);
+  const [selectedTaxi, setSelectedTaxi] = useState(null); // Holds the selected taxi to display on the map
 
-  // Function to fetch HTML data and parse it
+  // Fetch taxis data
   const fetchTaxisData = async () => {
     try {
-      const response = await fetch('https://clasespersonales.com/taxis/');
-      const html = await response.text(); // Get the raw HTML as text
+      const response = await fetch("https://clasespersonales.com/taxis/");
+      const html = await response.text();
 
       const taxis = [];
-      const rows = html.split('<tr>');
+      const rows = html.split("<tr>");
 
       for (let i = 1; i < rows.length; i++) {
         let row = rows[i];
         if (!row.trim()) continue;
 
-        // Clean up HTML tags and entities like &nbsp;
-        row = row.replace(/&nbsp;/g, ' ').replace(/<\/?[^>]+(>|$)/g, '').trim();
+        row = row
+          .replace(/&nbsp;/g, " ")
+          .replace(/<\/?[^>]+(>|$)/g, "")
+          .trim();
 
-        const matches = row.match(/(\d+)\s*(\d+)\s*(-?\d+\.\d+)\s*(-?\d+\.\d+)/);
+        const matches = row.match(
+          /(\d+)\s*(\d+)\s*(-?\d+\.\d+)\s*(-?\d+\.\d+)/
+        );
         if (matches) {
           taxis.push({
             movil: matches[1],
@@ -39,44 +48,45 @@ export default function App() {
       setTaxisData(taxis);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching taxi data:', error);
+      console.error("Error fetching taxi data:", error);
       setLoading(false);
     }
   };
 
-  // Function to get the user's current location
+  // Function to get the user's location
   const getUserLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
-      if (status === 'granted') {
-        // Fetch user's current location
+      if (status === "granted") {
         const location = await Location.getCurrentPositionAsync({});
-        setUserLocation(location.coords); // Save latitude and longitude in state
+        setUserLocation(location.coords);
       } else {
-        setLocationError('Permission to access location was denied');
+        setLocationError("Permission to access location was denied");
       }
     } catch (error) {
-      setLocationError('Error fetching location');
+      setLocationError("Error fetching location");
       console.error(error);
     }
   };
 
-  // Haversine formula to calculate distance between two coordinates
+  // Haversine formula to calculate distance
   const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radius of Earth in km
-    const dLat = (lat2 - lat1) * (Math.PI / 180); // Convert degrees to radians
-    const dLon = (lon2 - lon1) * (Math.PI / 180); // Convert degrees to radians
-    const a = 
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c; // Distance in km
+    const distance = R * c;
     return distance;
   };
 
-  // Function to calculate the 3 nearest taxis
+  // Function to find nearest taxis
   const findNearestTaxis = () => {
     if (userLocation) {
       const distances = taxisData.map((taxi) => {
@@ -89,10 +99,10 @@ export default function App() {
         return { taxi, distance };
       });
 
-      // Sort taxis by distance and get the top 3
-      const sortedTaxis = distances.sort((a, b) => a.distance - b.distance).slice(0, 3);
-
-      setNearestTaxis(sortedTaxis.map(item => item.taxi));
+      const sortedTaxis = distances
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 3);
+      setNearestTaxis(sortedTaxis.map((item) => item.taxi));
     }
   };
 
@@ -107,6 +117,7 @@ export default function App() {
         <Text>Loading taxi data...</Text>
       ) : (
         <ScrollView>
+          <Text style={styles.title}>CODIGO - 326</Text>
           {taxisData.length > 0 ? (
             taxisData.map((taxi, index) => (
               <View key={index} style={styles.card}>
@@ -141,31 +152,102 @@ export default function App() {
         <View style={styles.nearestTaxisContainer}>
           <Text style={styles.title}>Nearest Taxis:</Text>
           {nearestTaxis.map((taxi, index) => (
-            <View key={index} style={styles.card}>
+            <TouchableOpacity
+              key={index}
+              style={styles.card}
+              onPress={() => navigation.navigate('MapScreen', { selectedTaxi: taxi, userLocation })}
+            >
               <Text style={styles.title}>MÓVIL: {taxi.movil}</Text>
               <Text style={styles.info}>LATITUD: {taxi.latitud}</Text>
               <Text style={styles.info}>LONGITUD: {taxi.longitud}</Text>
-              <Text style={styles.info}>Distance: {haversineDistance(userLocation.latitude, userLocation.longitude, taxi.latitud, taxi.longitud).toFixed(2)} km</Text>
-            </View>
+              <Text style={styles.info}>
+                Distance:{" "}
+                {haversineDistance(
+                  userLocation.latitude,
+                  userLocation.longitude,
+                  taxi.latitud,
+                  taxi.longitud
+                ).toFixed(2)}{" "}
+                km
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
       )}
     </View>
   );
-}
+};
+
+// MapScreen Component
+const MapScreen = ({ route, navigation }) => {
+  const { selectedTaxi, userLocation } = route.params;
+
+  return (
+    <View style={styles.container}>
+      <Button title="Go Back" onPress={() => navigation.goBack()} />
+
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: userLocation.latitude,
+          longitude: userLocation,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+        region={{
+          latitude: selectedTaxi.latitud,
+          longitude: selectedTaxi.longitud,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+      >
+        <Marker
+          coordinate={{
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+          }}
+          title="Your Location"
+          description="You are here"
+        />
+        <Marker
+          coordinate={{
+            latitude: selectedTaxi.latitud,
+            longitude: selectedTaxi.longitud,
+          }}
+          title="Taxi Location"
+          description={`Taxi Movil: ${selectedTaxi.movil}`}
+        />
+      </MapView>
+    </View>
+  );
+};
+
+// StackNavigator setup
+const Stack = createStackNavigator();
+
+const App = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Home">
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="MapScreen" component={MapScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   card: {
     marginBottom: 20,
     padding: 15,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: "#f8f8f8",
     borderRadius: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.8,
     shadowRadius: 2,
@@ -173,7 +255,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   info: {
     fontSize: 16,
@@ -182,13 +264,19 @@ const styles = StyleSheet.create({
   locationContainer: {
     marginTop: 20,
     padding: 15,
-    backgroundColor: '#e0f7fa',
+    backgroundColor: "#e0f7fa",
     borderRadius: 8,
   },
   nearestTaxisContainer: {
     marginTop: 20,
     padding: 15,
-    backgroundColor: '#f1f8e9',
+    backgroundColor: "#f1f8e9",
     borderRadius: 8,
   },
+  map: {
+    height: 400,
+    marginTop: 20,
+  },
 });
+
+export default App;
